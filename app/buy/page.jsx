@@ -66,7 +66,7 @@ export default function BuyPage() {
         <div className="container max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo.jpg" alt="Joy Data" className="h-8 w-8 rounded border border-slate-100" />
-            <span className="font-bold text-lg text-slate-900">Joy Data</span>
+            <span className="font-bold text-lg text-slate-900">Joy Online</span>
           </div>
           
           {/* Desktop Nav */}
