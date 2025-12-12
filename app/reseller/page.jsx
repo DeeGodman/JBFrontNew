@@ -8,9 +8,93 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Copy, CheckCircle, TrendingUp, Users, DollarSign } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 
+
+
+//IMPORTS I ADDED MYSELF
+import { useQuery } from "@tanstack/react-query"
+import toast from "react-hot-toast"
+
+
+
+
+
+
+
+
+
+
 export default function ResellerDashboard() {
   const [copied, setCopied] = useState(false)
-  const referralLink = "https://joybundle.com/buy?ref=RES-001"
+
+
+  // function for actually getting referral link from backend
+
+const fetchResellerLink = async () => {
+
+       const userId = "6939e7a48945df1d67c26f00"; // manually for now
+
+  try {
+   
+    //I will replace this with the BASE_URL from .env later
+    const response = await fetch(`https://2c8186ee0c04.ngrok-free.app/api/v1/users/reseller-link?userId=${userId}`, {
+      method: "GET",
+      headers: { 
+        "Content-Type": "application/json",
+         "ngrok-skip-browser-warning": "true"
+       },
+
+
+       //doing userID manually for now, will replace with auth token later
+   
+    });
+
+    // Handle non-2xx errors
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Something went wrong");
+    }
+
+    // Parse JSON
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.message || "Failed to fetch referral link");
+    }
+
+    
+    console.log("Fetched Link", data.referralURL);
+
+    return data; 
+    //  { success, message, referralURL }
+  } catch (error) {
+    console.error("Fetch referralLink Error:", error.message);
+    toast.error(error.message || "Unexpected error");
+    throw error;
+  }
+};
+
+
+  // useQuery hook
+const {
+  data,
+  isLoading,
+  isError,
+  refetch,
+} = useQuery({
+  queryKey: ["referralLink"],
+  queryFn: fetchResellerLink,
+});
+
+console.log("This is current data:", data);
+
+
+
+
+
+
+
+
+  const referralLink = data?.referralURL 
 
   const copyLink = () => {
     navigator.clipboard.writeText(referralLink)

@@ -30,6 +30,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 
+
+
+
+//I NEED TO PULL THE ACTUAL BUNDLE FROM DATABASE
 const initialBundles = [
   { id: 1, name: "1GB Data", price: 15, network: "mtn", volume: "1GB", active: true },
   { id: 2, name: "2GB Data", price: 28, network: "mtn", volume: "2GB", active: true },
