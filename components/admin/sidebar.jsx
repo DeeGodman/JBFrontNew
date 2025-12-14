@@ -13,20 +13,14 @@ import {
   Shield,
   FileText,
   Settings,
-<<<<<<< HEAD
-=======
   CreditCard,
->>>>>>> 145fc2d (payout comfirmation UI)
 } from "lucide-react"
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/admin" },
   { icon: ShoppingCart, label: "Orders", href: "/admin/orders" },
   { icon: FileText, label: "Transactions", href: "/admin/transactions" }, // Added Transactions link
-<<<<<<< HEAD
-=======
   { icon: CreditCard, label: "Confirm Payment", href: "/admin/confirm-payment" },
->>>>>>> 145fc2d (payout comfirmation UI)
   { icon: Users, label: "Resellers", href: "/admin/resellers" },
   { icon: Package, label: "Bundles", href: "/admin/bundles" },
   { icon: AlertCircle, label: "Complaints", href: "/admin/complaints" },

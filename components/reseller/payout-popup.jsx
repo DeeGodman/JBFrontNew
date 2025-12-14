@@ -383,6 +383,14 @@ const payoutSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 })
 
+
+
+
+
+
+
+
+//MAIN FUNCTION OVER HERE
 export function PayoutPopup({ availableBalance = 0, onSuccess }) {
   const [open, setOpen] = useState(false)
   const [selectedNetwork, setSelectedNetwork] = useState("")
@@ -411,6 +419,8 @@ export function PayoutPopup({ availableBalance = 0, onSuccess }) {
 
   // React Query Mutation
   const payoutMutation = useMutation({
+
+    //I have to later make the needed function for this wrapped in auth logic
     mutationFn: async (data) => {
       const response = await fetch(`${BASE_URL}/payout/request`, {
         method: "POST",
@@ -453,7 +463,7 @@ export function PayoutPopup({ availableBalance = 0, onSuccess }) {
       })
 
       // Invalidate relevant queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ["payoutStatus"] })
+      queryClient.invalidateQueries({ queryKey: ["recentPayouts"] })
       queryClient.invalidateQueries({ queryKey: ["userData"] })
       queryClient.invalidateQueries({ queryKey: ["resellerData"] })
 
