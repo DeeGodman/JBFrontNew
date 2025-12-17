@@ -17,10 +17,6 @@ import { useQuery } from "@tanstack/react-query"
 
 
 
-const payoutHistory = [
-  { id: 1, date: "2024-01-15", amount: 125.5, method: "Mobile Money", reference: "PAY-001", status: "completed" },
-  { id: 2, date: "2024-01-01", amount: 98.75, method: "Mobile Money", reference: "PAY-002", status: "completed" },
-]
 
 export default function ResellerEarningsPage() {
   const [activeTab, setActiveTab] = useState("commissions")
@@ -216,7 +212,7 @@ export default function ResellerEarningsPage() {
             <TrendingUp className="h-4 w-4 text-cyan-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">NaN for now</div>
+            <div className="text-2xl font-bold">{formatCurrency(payoutData?.pendingAmount)}</div>
             <Badge variant="secondary" className="mt-1">
               Silver Tier
             </Badge>
@@ -375,9 +371,11 @@ export default function ResellerEarningsPage() {
                     <TableCell>
                       <Badge
                         className={
-                          payout.status === 'completed'
-                            ? 'bg-green-500 hover:bg-green-600'
-                            : 'bg-yellow-500 hover:bg-yellow-600'
+                          payout.status === "completed"
+                            ? "bg-green-500 hover:bg-green-600 text-white/90"
+                            : payout.status === "pending"
+                              ? "bg-yellow-500 hover:bg-yellow-600 text-white/90"
+                              : "bg-red-500 hover:bg-red-600 text-white/90" // rejected
                         }
                       >
                         {payout.status}

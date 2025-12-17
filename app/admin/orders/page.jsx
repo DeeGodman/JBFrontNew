@@ -1,260 +1,409 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, RefreshCw, CheckCircle, XCircle, Eye, Download, TrendingUp, TrendingDown, ArrowUpDown, Filter } from "lucide-react"
-import { BulkTimestampSelector } from "@/components/admin/bulk-timestamp-selector"
-import { FulfillmentBadge } from "@/components/ui/fulfillment-status"
+import { 
+  Search, 
+  CheckCircle, 
+  XCircle, 
+  Eye, 
+  Clock, 
+  ChevronLeft, 
+  ChevronRight, 
+  Loader2,
+  TrendingUp,
+  ArrowUpDown
+} from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import toast from "react-hot-toast"
+import { useTransactions } from "../../contexts/TransactionContext"
 
-// Mock Data with cost and selling prices
-const initialOrders = [
-  {
-    id: "ORD-001",
-    customer: "024 555 0101",
-    bundle: "5GB MTN",
-    network: "MTN",
-    costPrice: 50.00,
-    sellingPrice: 60.00,
-    status: "processing",
-    date: "2024-10-22T10:30:00Z",
-    dateDisplay: "2 mins ago",
-  },
-  {
-    id: "ORD-002",
-    customer: "050 123 4567",
-    bundle: "10GB Telecel",
-    network: "Telecel",
-    costPrice: 85.00,
-    sellingPrice: 100.00,
-    status: "delivered",
-    date: "2024-10-22T10:25:00Z",
-    dateDisplay: "5 mins ago",
-  },
-  {
-    id: "ORD-003",
-    customer: "024 987 6543",
-    bundle: "1GB MTN",
-    network: "MTN",
-    costPrice: 12.00,
-    sellingPrice: 15.00,
-    status: "failed",
-    date: "2024-10-22T10:20:00Z",
-    dateDisplay: "10 mins ago",
-  },
-  {
-    id: "ORD-004",
-    customer: "027 111 2222",
-    bundle: "2GB AT",
-    network: "AT",
-    costPrice: 20.00,
-    sellingPrice: 25.00,
-    status: "delivered",
-    date: "2024-10-22T10:15:00Z",
-    dateDisplay: "15 mins ago",
-  },
-  {
-    id: "ORD-005",
-    customer: "055 555 5555",
-    bundle: "5GB MTN",
-    network: "MTN",
-    costPrice: 50.00,
-    sellingPrice: 60.00,
-    status: "accepted",
-    date: "2024-10-22T10:10:00Z",
-    dateDisplay: "20 mins ago",
-  },
-]
+const BASE_URL = "https://2c8186ee0c04.ngrok-free.app/api/v1"
 
-export default function OrdersPage() {
-  const [orders, setOrders] = useState(initialOrders)
+export default function TransactionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [networkFilter, setNetworkFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all")
   const [sortBy, setSortBy] = useState("date")
   const [sortOrder, setSortOrder] = useState("desc")
-  const [selectedOrders, setSelectedOrders] = useState([])
-  const [dateRange, setDateRange] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [selectedTransaction, setSelectedTransaction] = useState(null)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isConfirmDeliveryDialogOpen, setIsConfirmDeliveryDialogOpen] = useState(false)
+  const [isMarkFailedDialogOpen, setIsMarkFailedDialogOpen] = useState(false)
+  const [failureReason, setFailureReason] = useState("")
 
-  const handleStatusChange = (id, newStatus) => {
-    setOrders(orders.map((o) => (o.id === id ? { ...o, status: newStatus } : o)))
-  }
+  const queryClient = useQueryClient()
+  const itemsPerPage = 10
 
-  // Filter and sort orders
-  const filteredOrders = useMemo(() => {
-    let result = [...orders]
+  // Get data from context
+  const {
+    transactions: contextTransactions,
+    analytics,
+    pagination,
+    isLoadingTransactions,
+    isErrorTransactions,
+    refetchTransactions,
+  } = useTransactions()
+
+  // Mark as delivered mutation
+  const deliveredMutation = useMutation({
+    mutationFn: async (transactionId) => {
+      const response = await fetch(`${BASE_URL}/transactions/${transactionId}/delivery`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          deliveryStatus: "delivered"
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.message || "Failed to mark as delivered")
+      }
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.message || "Failed to mark as delivered")
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["transactions"])
+      refetchTransactions()
+      toast.success("Transaction marked as delivered")
+      setIsConfirmDeliveryDialogOpen(false)
+      setSelectedTransaction(null)
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to mark as delivered")
+    },
+  })
+
+
+
+
+
+  // Mark as failed mutation
+  const failedMutation = useMutation({
+    mutationFn: async ({ transactionId, reason }) => {
+      const response = await fetch(`${BASE_URL}/transactions/${transactionId}/delivery`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          deliveryStatus: "failed",
+          failureReason: reason
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.message || "Failed to mark as failed")
+      }
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.message || "Failed to mark as failed")
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["transactions"])
+      refetchTransactions()
+      toast.success("Transaction marked as failed")
+      setIsMarkFailedDialogOpen(false)
+      setSelectedTransaction(null)
+      setFailureReason("")
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to mark as failed")
+    },
+  })
+
+
+
+
+
+  // Frontend filtering
+  const filteredTransactions = contextTransactions.filter((txn) => {
+    // Only show successful transactions with pending or delivered delivery status
+    if (txn.status !== "success") return false
+    if (txn.deliveryStatus !== "pending" && txn.deliveryStatus !== "delivered") return false
 
     // Search filter
     if (searchQuery) {
-      result = result.filter(o => 
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer.includes(searchQuery) ||
-        o.bundle.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      const searchLower = searchQuery.toLowerCase()
+      const matchesSearch = 
+        txn.transactionId?.toLowerCase().includes(searchLower) ||
+        txn.customer?.includes(searchQuery) ||
+        txn.bundleName?.toLowerCase().includes(searchLower)
+      
+      if (!matchesSearch) return false
     }
+
+
 
     // Network filter
-    if (networkFilter !== "all") {
-      result = result.filter(o => o.network === networkFilter)
+    if (networkFilter !== "all" && txn.network?.toUpperCase() !== networkFilter.toUpperCase()) {
+      return false
     }
 
-    // Status filter
-    if (statusFilter !== "all") {
-      result = result.filter(o => o.status === statusFilter)
+    // Delivery status filter
+    if (deliveryStatusFilter !== "all" && txn.deliveryStatus !== deliveryStatusFilter) {
+      return false
     }
 
-    // Date range filter
-    if (dateRange) {
-      result = result.filter(o => {
-        const orderDate = new Date(o.date)
-        return orderDate >= dateRange.start && orderDate <= dateRange.end
-      })
+    return true
+  })
+
+
+
+
+  // Frontend sorting
+  const sortedTransactions = [...filteredTransactions].sort((a, b) => {
+    let compareValue = 0
+
+    switch (sortBy) {
+      case "date":
+        compareValue = new Date(b.dateTime) - new Date(a.dateTime)
+        break
+      case "amount":
+        compareValue = b.amount - a.amount
+        break
+      case "profit":
+        compareValue = b.JBProfit - a.JBProfit
+        break
+      default:
+        compareValue = new Date(b.dateTime) - new Date(a.dateTime)
     }
 
-    // Sorting
-    result.sort((a, b) => {
-      let comparison = 0
-      switch (sortBy) {
-        case "date":
-          comparison = new Date(a.date) - new Date(b.date)
-          break
-        case "amount":
-          comparison = a.sellingPrice - b.sellingPrice
-          break
-        case "profit":
-          comparison = (a.sellingPrice - a.costPrice) - (b.sellingPrice - b.costPrice)
-          break
-        default:
-          comparison = 0
-      }
-      return sortOrder === "desc" ? -comparison : comparison
-    })
+    return sortOrder === "asc" ? -compareValue : compareValue
+  })
 
-    return result
-  }, [orders, searchQuery, networkFilter, statusFilter, sortBy, sortOrder, dateRange])
 
-  // Calculate summary stats
-  const summaryStats = useMemo(() => {
-    const completedOrders = filteredOrders.filter(o => o.status === "delivered" || o.status === "completed")
-    const totalCost = completedOrders.reduce((sum, o) => sum + o.costPrice, 0)
-    const totalRevenue = completedOrders.reduce((sum, o) => sum + o.sellingPrice, 0)
-    const totalProfit = totalRevenue - totalCost
-    
-    return { totalCost, totalRevenue, totalProfit, orderCount: completedOrders.length }
-  }, [filteredOrders])
 
-  const toggleSelectOrder = (orderId) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId) 
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
+
+
+  // Pagination
+  const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage)
+ 
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex)
+
+  // Count by delivery status (only from success transactions)
+  const successTransactions = contextTransactions.filter((t) => t.status === "success" && (t.deliveryStatus === "pending" || t.deliveryStatus === "delivered"))
+  const pendingDeliveryCount = successTransactions.filter((t) => t.deliveryStatus === "pending").length
+  const deliveredCount = successTransactions.filter((t) => t.deliveryStatus === "delivered").length
+
+  // Network colors
+  const getNetworkColor = (network) => {
+    const colors = {
+      MTN: "bg-yellow-100 text-yellow-600",
+      AT: "bg-red-100 text-red-600",
+      VODAFONE: "bg-red-100 text-red-600",
+      TELECEL: "bg-blue-100 text-blue-600",
+    }
+    return colors[network?.toUpperCase()] || "bg-gray-100 text-gray-600"
+  }
+
+  // Status badge component
+  const StatusBadge = ({ status }) => {
+    const colors = {
+      success: "bg-green-100 text-green-700 hover:bg-green-100",
+      pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
+      failed: "bg-red-100 text-red-700 hover:bg-red-100",
+    }
+
+    return (
+      <Badge 
+        className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
+        variant="secondary"
+      >
+        {status}
+      </Badge>
     )
   }
 
-  const toggleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([])
-    } else {
-      setSelectedOrders(filteredOrders.map(o => o.id))
+  const DeliveryStatusBadge = ({ status }) => {
+    const colors = {
+      delivered: "bg-green-100 text-green-700 hover:bg-green-100",
+      pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
+      failed: "bg-red-100 text-red-700 hover:bg-red-100",
     }
+
+    return (
+      <Badge 
+        className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
+        variant="secondary"
+      >
+        {status}
+      </Badge>
+    )
   }
 
-  const exportCSV = () => {
-    const headers = ["Order ID", "Customer", "Bundle", "Network", "Cost Price", "Selling Price", "Profit", "Status", "Date"]
-    const dataToExport = selectedOrders.length > 0 
-      ? filteredOrders.filter(o => selectedOrders.includes(o.id))
-      : filteredOrders
-    
-    const csvContent = [
-      headers.join(","),
-      ...dataToExport.map((o) => [
-        o.id, 
-        o.customer, 
-        o.bundle, 
-        o.network,
-        o.costPrice.toFixed(2),
-        o.sellingPrice.toFixed(2),
-        (o.sellingPrice - o.costPrice).toFixed(2),
-        o.status, 
-        o.dateDisplay
-      ].join(",")),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "orders-export.csv"
-    a.click()
-    window.URL.revokeObjectURL(url)
+  const handleViewDetails = (transaction) => {
+    setSelectedTransaction(transaction)
+    setIsViewDialogOpen(true)
   }
 
-  const handleBulkAction = (action) => {
-    if (action === "export") {
-      exportCSV()
+  const handleMarkDelivered = (transaction) => {
+    setSelectedTransaction(transaction)
+    setIsConfirmDeliveryDialogOpen(true)
+  }
+
+  const handleMarkFailed = (transaction) => {
+    setSelectedTransaction(transaction)
+    setIsMarkFailedDialogOpen(true)
+  }
+
+  const confirmDelivery = () => {
+    if (!selectedTransaction) return
+    deliveredMutation.mutate(selectedTransaction.transactionId)
+  }
+
+  const confirmFailed = () => {
+    if (!selectedTransaction || !failureReason.trim()) {
+      toast.error("Please provide a failure reason")
+      return
     }
-    // Add more bulk actions as needed
+    failedMutation.mutate({
+      transactionId: selectedTransaction.transactionId,
+      reason: failureReason
+    })
+  }
+
+  // Format date helper
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A"
+    return new Date(dateString).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold tracking-tight">Order Fulfillment</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={exportCSV}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">All Transactions</h2>
+          <p className="text-muted-foreground">Manage and monitor all data bundle transactions.</p>
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-slate-500">Total Orders</p>
-            <p className="text-2xl font-bold">{filteredOrders.length}</p>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Total Revenue</CardTitle>
+            <TrendingUp className="h-4 w-4 text-slate-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingTransactions ? (
+              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {formatCurrency(analytics?.totalRevenue || 0)}
+              </div>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-slate-500">Total Cost</p>
-            <p className="text-2xl font-bold">GHS {summaryStats.totalCost.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-slate-500">Total Revenue</p>
-            <p className="text-2xl font-bold">GHS {summaryStats.totalRevenue.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-slate-500">Total Profit</p>
-            <p className={`text-2xl font-bold flex items-center gap-1 ${summaryStats.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {summaryStats.totalProfit >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
-              GHS {summaryStats.totalProfit.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Bulk Selection */}
-      <BulkTimestampSelector
-        onSelect={setDateRange}
-        onBulkAction={handleBulkAction}
-        selectedCount={selectedOrders.length}
-        totalCount={filteredOrders.length}
-        actions={["export"]}
-      />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Total Orders</CardTitle>
+            <CheckCircle className="h-4 w-4 text-slate-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingTransactions ? (
+              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {analytics?.totalOrders || 0}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Active Orders</CardTitle>
+            <Clock className="h-4 w-4 text-slate-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingTransactions ? (
+              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {analytics?.activeOrders || 0}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Total Cost</CardTitle>
+            <TrendingUp className="h-4 w-4 text-slate-500" />
+          </CardHeader>
+          <CardContent>
+            {isLoadingTransactions ? (
+              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
+            ) : (
+              <div className="">
+                <div className="text-2xl font-bold">
+                   {formatCurrency(analytics?.totalCost || 0)}
+                </div>
+               
+                  <div className="">
+                   JBCP: {formatCurrency(analytics?.totalActualJBCPCost || 0)}
+                </div>
+                 <div className="">
+                   RSP: {formatCurrency(analytics?.totalResellerProfits || 0)}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        
+      </div>
 
       <Card>
         <CardHeader className="pb-4">
@@ -285,17 +434,17 @@ export default function OrdersPage() {
                 </SelectContent>
               </Select>
 
-              {/* Status Filter */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              {/* Status Filter - REMOVED since we only show success */}
+              
+              {/* Delivery Status Filter */}
+              <Select value={deliveryStatusFilter} onValueChange={setDeliveryStatusFilter}>
                 <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder="Delivery" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="all">All Delivery</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="delivered">Delivered</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -318,73 +467,107 @@ export default function OrdersPage() {
               >
                 <ArrowUpDown className="h-4 w-4" />
               </Button>
+
+              <Button 
+                onClick={() => refetchTransactions()} 
+                className="border-2 border-slate-600 bg-blue-500 text-white hover:bg-green-700"
+                disabled={isLoadingTransactions}
+              >
+                Refresh
+              </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto border rounded-md">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                      onChange={toggleSelectAll}
-                      className="rounded"
-                    />
-                  </TableHead>
-                  <TableHead className="whitespace-nowrap">Order ID</TableHead>
+                  <TableHead className="whitespace-nowrap">Transaction ID</TableHead>
                   <TableHead className="whitespace-nowrap">Customer</TableHead>
                   <TableHead className="whitespace-nowrap">Bundle</TableHead>
                   <TableHead className="whitespace-nowrap">Network</TableHead>
                   <TableHead className="whitespace-nowrap">Amount</TableHead>
                   <TableHead className="whitespace-nowrap">Profit</TableHead>
                   <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="whitespace-nowrap">Delivery</TableHead>
                   <TableHead className="whitespace-nowrap">Time</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOrders.map((order) => {
-                  const profit = order.sellingPrice - order.costPrice
-                  return (
-                    <TableRow key={order.id} className={selectedOrders.includes(order.id) ? "bg-slate-50" : ""}>
-                      <TableCell>
-                        <input 
-                          type="checkbox" 
-                          checked={selectedOrders.includes(order.id)}
-                          onChange={() => toggleSelectOrder(order.id)}
-                          className="rounded"
-                        />
+                {isLoadingTransactions ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                        <p className="text-slate-500">Loading transactions...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : isErrorTransactions ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <XCircle className="h-8 w-8 text-red-500" />
+                        <p className="text-red-600 font-medium">Failed to load transactions</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => refetchTransactions()}
+                          className="mt-2"
+                        >
+                          Try Again
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedTransactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-slate-500">
+                      No transactions found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedTransactions.map((transaction) => (
+                    <TableRow key={transaction.transactionId}>
+                      <TableCell className="font-medium whitespace-nowrap font-mono text-xs">
+                        {transaction.transactionId?.slice(-12) || "N/A"}
                       </TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">{order.id}</TableCell>
-                      <TableCell className="whitespace-nowrap">{order.customer}</TableCell>
-                      <TableCell className="whitespace-nowrap">{order.bundle}</TableCell>
+                      <TableCell className="whitespace-nowrap">{transaction.customer}</TableCell>
+                      <TableCell className="whitespace-nowrap">{transaction.bundleName}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <Badge variant="outline">{order.network}</Badge>
+                        <Badge variant="outline" className={getNetworkColor(transaction.network)}>
+                          {transaction.network}
+                        </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">GHS {order.sellingPrice.toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatCurrency(transaction.amount)}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <span className={`flex items-center gap-1 font-medium ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                          {profit >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                          GHS {profit.toFixed(2)}
+                        <span className="flex items-center gap-1 font-medium text-green-600">
+                          <TrendingUp className="h-3 w-3" />
+                          {formatCurrency(transaction.JBProfit)}
                         </span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <FulfillmentBadge status={order.status} size="sm" />
+                        <StatusBadge status={transaction.status} />
                       </TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">{order.dateDisplay}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <DeliveryStatusBadge status={transaction.deliveryStatus} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                        {formatDate(transaction.dateTime)}
+                      </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex justify-end gap-2">
-                          {(order.status === "accepted" || order.status === "processing") && (
+                          {transaction.status === "success" && transaction.deliveryStatus === "pending" && (
                             <>
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
                                 title="Mark Delivered"
-                                onClick={() => handleStatusChange(order.id, "delivered")}
+                                onClick={() => handleMarkDelivered(transaction)}
+                                disabled={deliveredMutation.isPending}
                               >
                                 <CheckCircle className="h-4 w-4" />
                               </Button>
@@ -393,25 +576,274 @@ export default function OrdersPage() {
                                 variant="ghost"
                                 className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                                 title="Mark Failed"
-                                onClick={() => handleStatusChange(order.id, "failed")}
+                                onClick={() => handleMarkFailed(transaction)}
+                                disabled={failedMutation.isPending}
                               >
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
                           )}
-                          <Button size="icon" variant="ghost" className="h-8 w-8">
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-8 w-8"
+                            onClick={() => handleViewDetails(transaction)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )
-                })}
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && !isLoadingTransactions && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-slate-500">
+                Showing {startIndex + 1} to {Math.min(endIndex, sortedTransactions.length)} of {sortedTransactions.length} results
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="gap-1 hover:bg-slate-200"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="gap-1 hover:bg-slate-200"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transaction Details</DialogTitle>
+            <DialogDescription>Complete information about this transaction.</DialogDescription>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500">Transaction ID</p>
+                  <p className="font-mono font-medium text-xs">{selectedTransaction.transactionId}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Amount</p>
+                  <p className="font-medium text-lg">{formatCurrency(selectedTransaction.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Customer</p>
+                  <p className="font-medium">{selectedTransaction.customer}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Network</p>
+                  <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                    {selectedTransaction.network}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-slate-500">Bundle</p>
+                  <p className="font-medium">{selectedTransaction.bundleName}</p>
+                  <p className="text-xs text-slate-500">{selectedTransaction.bundleData}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Profit</p>
+                  <p className="font-medium text-green-600">{formatCurrency(selectedTransaction.JBProfit)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Reseller</p>
+                  <p className="font-medium">{selectedTransaction.resellerName}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Reseller Profit</p>
+                  <p className="font-medium">{formatCurrency(selectedTransaction.resellerProfit)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Status</p>
+                  <StatusBadge status={selectedTransaction.status} />
+                </div>
+                <div>
+                  <p className="text-slate-500">Delivery Status</p>
+                  <DeliveryStatusBadge status={selectedTransaction.deliveryStatus} />
+                </div>
+                <div className="col-span-2">
+                  <p className="text-slate-500">Date & Time</p>
+                  <p className="font-medium">{formatDate(selectedTransaction.dateTime)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Delivery Dialog */}
+      <Dialog open={isConfirmDeliveryDialogOpen} onOpenChange={setIsConfirmDeliveryDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Delivery</DialogTitle>
+            <DialogDescription>
+              Confirm that the data bundle has been successfully delivered to the customer.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="py-4">
+              <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium">{selectedTransaction.customer}</p>
+                    <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                      {selectedTransaction.network}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-500">{selectedTransaction.bundleName}</p>
+                  <p className="text-xl font-bold text-green-600">{formatCurrency(selectedTransaction.amount)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmDeliveryDialogOpen(false)}
+              disabled={deliveredMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={confirmDelivery}
+              disabled={deliveredMutation.isPending}
+            >
+              {deliveredMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Confirm Delivery
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Failed Dialog */}
+      <Dialog open={isMarkFailedDialogOpen} onOpenChange={setIsMarkFailedDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark Delivery as Failed</DialogTitle>
+            <DialogDescription>
+              Please provide a reason why this delivery failed. The customer and reseller will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium">{selectedTransaction.customer}</p>
+                    <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                      {selectedTransaction.network}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-500">{selectedTransaction.bundleName}</p>
+                  <p className="text-xl font-bold text-red-600">{formatCurrency(selectedTransaction.amount)}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="failure-reason">Failure Reason *</Label>
+                <Textarea
+                  id="failure-reason"
+                  placeholder="Enter the reason for delivery failure..."
+                  value={failureReason}
+                  onChange={(e) => setFailureReason(e.target.value)}
+                  disabled={failedMutation.isPending}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              className="outline hover:bg-slate-300"
+              onClick={() => setIsMarkFailedDialogOpen(false)}
+              disabled={failedMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="outline bg-red-500 text-white hover:bg-red-900"
+              onClick={confirmFailed}
+              disabled={failedMutation.isPending || !failureReason.trim()}
+            >
+              {failedMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Mark as Failed
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

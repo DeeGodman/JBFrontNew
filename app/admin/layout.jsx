@@ -3,7 +3,14 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export default function AdminLayout({ children }) {
+
+
+
+//my own additions
+import { UserProvider, useUser } from "../contexts/UserContext"
+import { TransactionProvider, useTransactions } from "../contexts/TransactionContext"
+
+ function AdminLayoutContent({ children }) {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="hidden md:block fixed inset-y-0 left-0 w-64 z-50">
@@ -39,5 +46,20 @@ export default function AdminLayout({ children }) {
         <main className="p-4 md:p-6 flex-1">{children}</main>
       </div>
     </div>
+  )
+}
+
+
+
+
+// ✅ Main layout component wraps with UserProvider
+export default function AdminLayout({ children }) {
+
+  console.log("ResellerLayout rendered")
+
+  return (
+    <TransactionProvider>
+      <AdminLayoutContent>{children}</AdminLayoutContent>
+    </TransactionProvider>
   )
 }
