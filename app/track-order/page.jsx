@@ -1,16 +1,37 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Search, Package, CheckCircle, Clock, XCircle, Home, Phone, Calendar, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/components/ui/use-toast"
+import { useState } from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
+  Search,
+  Package,
+  CheckCircle,
+  Clock,
+  XCircle,
+  Home,
+  Phone,
+  Calendar,
+  Loader2,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://2c8186ee0c04.ngrok-free.app/api/v1"
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://condescending-charlott-discernible.ngrok-free.dev/api/v1";
 
 // API function to track orders
 const trackOrdersByPhone = async (phoneNumber, page = 1) => {
@@ -20,35 +41,25 @@ const trackOrdersByPhone = async (phoneNumber, page = 1) => {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "true"
+        "ngrok-skip-browser-warning": "true",
       },
-    }
-  )
-  
+    },
+  );
+
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.message || "Failed to track orders")
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to track orders");
   }
-  
-  const data = await response.json()
-  return data
-}
 
-
-
-
-
+  const data = await response.json();
+  return data;
+};
 
 export default function TrackOrderPage() {
-  const [phoneNumber, setPhoneNumber] = useState("")
-  const [searchPhone, setSearchPhone] = useState("")
-  const [page, setPage] = useState(1)
-  const { toast } = useToast()
-  
-
-
-
-
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [searchPhone, setSearchPhone] = useState("");
+  const [page, setPage] = useState(1);
+  const { toast } = useToast();
 
   // Fetch orders using React Query
   const { data, isLoading, isError, error } = useQuery({
@@ -56,29 +67,23 @@ export default function TrackOrderPage() {
     queryFn: () => trackOrdersByPhone(searchPhone, page),
     enabled: !!searchPhone,
     retry: false,
-  })
-
-
-
-
-
-
+  });
 
   const handlePhoneSubmit = (e) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+
     if (!phoneNumber.trim() || phoneNumber.length < 10) {
       toast({
         title: "Invalid Phone Number",
         description: "Please enter a valid phone number",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setSearchPhone(phoneNumber)
-    setPage(1)
-  }
+    setSearchPhone(phoneNumber);
+    setPage(1);
+  };
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -86,32 +91,32 @@ export default function TrackOrderPage() {
       processing: { color: "bg-yellow-500", icon: Clock },
       pending: { color: "bg-blue-500", icon: Package },
       failed: { color: "bg-red-500", icon: XCircle },
-    }
-    
-    const config = statusMap[status] || { color: "bg-gray-500", icon: Package }
-    const Icon = config.icon
-    
+    };
+
+    const config = statusMap[status] || { color: "bg-gray-500", icon: Package };
+    const Icon = config.icon;
+
     return (
       <Badge className={`${config.color} text-white flex items-center gap-1`}>
         <Icon className="h-3 w-3" />
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
-    )
-  }
+    );
+  };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
-  const orderHistory = data?.data?.orders || []
-  const pagination = data?.data?.pagination
+  const orderHistory = data?.data?.orders || [];
+  const pagination = data?.data?.pagination;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -120,7 +125,9 @@ export default function TrackOrderPage() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo.jpg" alt="Logo" className="h-8 w-8 rounded-md" />
-            <span className="font-bold text-xl text-slate-900 hidden sm:inline-block">Joy Data Bundles</span>
+            <span className="font-bold text-xl text-slate-900 hidden sm:inline-block">
+              Joy Data Bundles
+            </span>
           </div>
           <Link href="/">
             <Button variant="ghost" size="sm">
@@ -133,9 +140,12 @@ export default function TrackOrderPage() {
 
       <main className="flex-1 container mx-auto px-4 py-12 flex flex-col items-center">
         <div className="text-center max-w-2xl mb-10">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl mb-4">Track Your Order</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl mb-4">
+            Track Your Order
+          </h1>
           <p className="text-lg text-slate-600">
-            Enter your Phone Number to check the current status of your data bundle delivery.
+            Enter your Phone Number to check the current status of your data
+            bundle delivery.
           </p>
         </div>
 
@@ -156,13 +166,16 @@ export default function TrackOrderPage() {
                     disabled={isLoading}
                     className="pl-8"
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handlePhoneSubmit(e)
+                      if (e.key === "Enter") {
+                        handlePhoneSubmit(e);
                       }
                     }}
                   />
                 </div>
-                <Button onClick={handlePhoneSubmit} disabled={isLoading || !phoneNumber}>
+                <Button
+                  onClick={handlePhoneSubmit}
+                  disabled={isLoading || !phoneNumber}
+                >
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -173,7 +186,7 @@ export default function TrackOrderPage() {
                   )}
                 </Button>
               </div>
-              
+
               {isError && (
                 <div className="p-3 bg-red-50 text-red-600 text-sm rounded-md flex items-center gap-2">
                   <XCircle className="h-4 w-4" />
@@ -209,40 +222,53 @@ export default function TrackOrderPage() {
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <p className="font-semibold text-slate-900 text-lg">{order.bundleName}</p>
+                          <p className="font-semibold text-slate-900 text-lg">
+                            {order.bundleName}
+                          </p>
                           <p className="text-sm text-slate-600 mt-1">
-                            {order.metadata?.bundleData} • {order.metadata?.network?.toUpperCase()}
+                            {order.metadata?.bundleData} •{" "}
+                            {order.metadata?.network?.toUpperCase()}
                           </p>
                         </div>
                         <div className="text-right">
                           {getStatusBadge(order.deliveryStatus || order.status)}
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-4 text-sm border-t pt-3">
                         <div>
                           <p className="text-slate-500">Amount</p>
-                          <p className="font-medium text-slate-900">GHS {order.amount.toFixed(2)}</p>
+                          <p className="font-medium text-slate-900">
+                            GHS {order.amount.toFixed(2)}
+                          </p>
                         </div>
                         <div>
                           <p className="text-slate-500">Order Date</p>
-                          <p className="font-medium text-slate-900">{formatDate(order.createdAt)}</p>
+                          <p className="font-medium text-slate-900">
+                            {formatDate(order.createdAt)}
+                          </p>
                         </div>
                         {order.deliveredAt && (
                           <div className="col-span-2">
                             <p className="text-slate-500">Delivered</p>
-                            <p className="font-medium text-green-600">{formatDate(order.deliveredAt)}</p>
+                            <p className="font-medium text-green-600">
+                              {formatDate(order.deliveredAt)}
+                            </p>
                           </div>
                         )}
                         {order.failureReason && (
                           <div className="col-span-2">
                             <p className="text-slate-500">Failure Reason</p>
-                            <p className="font-medium text-red-600">{order.failureReason}</p>
+                            <p className="font-medium text-red-600">
+                              {order.failureReason}
+                            </p>
                           </div>
                         )}
                       </div>
-                      
-                      <p className="text-xs text-slate-400 mt-3">Order ID: {order._id}</p>
+
+                      <p className="text-xs text-slate-400 mt-3">
+                        Order ID: {order._id}
+                      </p>
                     </div>
                   ))}
 
@@ -252,21 +278,21 @@ export default function TrackOrderPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={!pagination.hasPrevPage || isLoading}
                       >
                         <ChevronLeft className="h-4 w-4 mr-1" />
                         Previous
                       </Button>
-                      
+
                       <span className="text-sm text-slate-600">
                         Page {pagination.currentPage} of {pagination.totalPages}
                       </span>
-                      
+
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => p + 1)}
+                        onClick={() => setPage((p) => p + 1)}
                         disabled={!pagination.hasNextPage || isLoading}
                       >
                         Next
@@ -278,8 +304,12 @@ export default function TrackOrderPage() {
               ) : (
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500 font-medium">No orders found for this phone number</p>
-                  <p className="text-sm text-slate-400 mt-2">Please check your phone number and try again</p>
+                  <p className="text-slate-500 font-medium">
+                    No orders found for this phone number
+                  </p>
+                  <p className="text-sm text-slate-400 mt-2">
+                    Please check your phone number and try again
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -293,5 +323,5 @@ export default function TrackOrderPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

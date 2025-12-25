@@ -1,25 +1,39 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { 
-  Search, 
-  CheckCircle, 
-  XCircle, 
-  Eye, 
-  Clock, 
-  ChevronLeft, 
-  ChevronRight, 
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Download,
   Loader2,
   TrendingUp,
-  ArrowUpDown
-} from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
+  ArrowUpDown,
+} from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -27,207 +41,201 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import toast from "react-hot-toast"
-import { useTransactions } from "../../contexts/TransactionContext"
-
-const BASE_URL = "https://2c8186ee0c04.ngrok-free.app/api/v1"
+} from "@/components/ui/select";
+import toast from "react-hot-toast";
+import { useTransactions } from "../../contexts/TransactionContext";
 
 export default function TransactionsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [networkFilter, setNetworkFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all")
-  const [sortBy, setSortBy] = useState("date")
-  const [sortOrder, setSortOrder] = useState("desc")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [selectedTransaction, setSelectedTransaction] = useState(null)
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [isConfirmDeliveryDialogOpen, setIsConfirmDeliveryDialogOpen] = useState(false)
-  const [isMarkFailedDialogOpen, setIsMarkFailedDialogOpen] = useState(false)
-  const [failureReason, setFailureReason] = useState("")
+  const [searchQuery, setSearchQuery] = useState("");
+  const [networkFilter, setNetworkFilter] = useState("all");
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("date");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isConfirmDeliveryDialogOpen, setIsConfirmDeliveryDialogOpen] =
+    useState(false);
+  const [isMarkFailedDialogOpen, setIsMarkFailedDialogOpen] = useState(false);
+  const [failureReason, setFailureReason] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
-  const queryClient = useQueryClient()
-  const itemsPerPage = 10
+  const queryClient = useQueryClient();
+  const itemsPerPage = 10;
 
   // Get data from context
   const {
     transactions: contextTransactions,
     analytics,
-    pagination,
     isLoadingTransactions,
     isErrorTransactions,
     refetchTransactions,
-  } = useTransactions()
+  } = useTransactions();
 
   // Mark as delivered mutation
   const deliveredMutation = useMutation({
     mutationFn: async (transactionId) => {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            deliveryStatus: "delivered",
+          }),
         },
-        body: JSON.stringify({
-          deliveryStatus: "delivered"
-        }),
-      })
+      );
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.message || "Failed to mark as delivered")
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to mark as delivered");
       }
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.message || "Failed to mark as delivered")
+        throw new Error(data.message || "Failed to mark as delivered");
       }
 
-      return data
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["transactions"])
-      refetchTransactions()
-      toast.success("Transaction marked as delivered")
-      setIsConfirmDeliveryDialogOpen(false)
-      setSelectedTransaction(null)
+      queryClient.invalidateQueries(["transactions"]);
+      refetchTransactions();
+      toast.success("Transaction marked as delivered");
+      setIsConfirmDeliveryDialogOpen(false);
+      setSelectedTransaction(null);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to mark as delivered")
+      toast.error(error.message || "Failed to mark as delivered");
     },
-  })
-
-
-
-
+  });
 
   // Mark as failed mutation
   const failedMutation = useMutation({
     mutationFn: async ({ transactionId, reason }) => {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            deliveryStatus: "failed",
+            failureReason: reason,
+          }),
         },
-        body: JSON.stringify({
-          deliveryStatus: "failed",
-          failureReason: reason
-        }),
-      })
+      );
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.message || "Failed to mark as failed")
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to mark as failed");
       }
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.message || "Failed to mark as failed")
+        throw new Error(data.message || "Failed to mark as failed");
       }
 
-      return data
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["transactions"])
-      refetchTransactions()
-      toast.success("Transaction marked as failed")
-      setIsMarkFailedDialogOpen(false)
-      setSelectedTransaction(null)
-      setFailureReason("")
+      queryClient.invalidateQueries(["transactions"]);
+      refetchTransactions();
+      toast.success("Transaction marked as failed");
+      setIsMarkFailedDialogOpen(false);
+      setSelectedTransaction(null);
+      setFailureReason("");
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to mark as failed")
+      toast.error(error.message || "Failed to mark as failed");
     },
-  })
-
-
-
-
+  });
 
   // Frontend filtering
   const filteredTransactions = contextTransactions.filter((txn) => {
-    // Only show successful transactions with pending or delivered delivery status
-    if (txn.status !== "success") return false
-    if (txn.deliveryStatus !== "pending" && txn.deliveryStatus !== "delivered") return false
+    // Only show successful transactions with valid delivery statuses
+    if (txn.status !== "success") return false;
+    if (
+      txn.deliveryStatus !== "pending" &&
+      txn.deliveryStatus !== "delivered" &&
+      txn.deliveryStatus !== "processing"
+    )
+      return false;
 
     // Search filter
     if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase()
-      const matchesSearch = 
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch =
         txn.transactionId?.toLowerCase().includes(searchLower) ||
         txn.customer?.includes(searchQuery) ||
-        txn.bundleName?.toLowerCase().includes(searchLower)
-      
-      if (!matchesSearch) return false
+        txn.bundleName?.toLowerCase().includes(searchLower);
+
+      if (!matchesSearch) return false;
     }
 
-
-
     // Network filter
-    if (networkFilter !== "all" && txn.network?.toUpperCase() !== networkFilter.toUpperCase()) {
-      return false
+    if (
+      networkFilter !== "all" &&
+      txn.network?.toUpperCase() !== networkFilter.toUpperCase()
+    ) {
+      return false;
     }
 
     // Delivery status filter
-    if (deliveryStatusFilter !== "all" && txn.deliveryStatus !== deliveryStatusFilter) {
-      return false
+    if (
+      deliveryStatusFilter !== "all" &&
+      txn.deliveryStatus !== deliveryStatusFilter
+    ) {
+      return false;
     }
 
-    return true
-  })
-
-
-
+    return true;
+  });
 
   // Frontend sorting
   const sortedTransactions = [...filteredTransactions].sort((a, b) => {
-    let compareValue = 0
+    let compareValue = 0;
 
     switch (sortBy) {
       case "date":
-        compareValue = new Date(b.dateTime) - new Date(a.dateTime)
-        break
+        compareValue = new Date(b.dateTime) - new Date(a.dateTime);
+        break;
       case "amount":
-        compareValue = b.amount - a.amount
-        break
+        compareValue = b.amount - a.amount;
+        break;
       case "profit":
-        compareValue = b.JBProfit - a.JBProfit
-        break
+        compareValue = b.JBProfit - a.JBProfit;
+        break;
       default:
-        compareValue = new Date(b.dateTime) - new Date(a.dateTime)
+        compareValue = new Date(b.dateTime) - new Date(a.dateTime);
     }
 
-    return sortOrder === "asc" ? -compareValue : compareValue
-  })
-
-
-
-
+    return sortOrder === "asc" ? -compareValue : compareValue;
+  });
 
   // Pagination
-  const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage)
- 
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex)
-
-  // Count by delivery status (only from success transactions)
-  const successTransactions = contextTransactions.filter((t) => t.status === "success" && (t.deliveryStatus === "pending" || t.deliveryStatus === "delivered"))
-  const pendingDeliveryCount = successTransactions.filter((t) => t.deliveryStatus === "pending").length
-  const deliveredCount = successTransactions.filter((t) => t.deliveryStatus === "delivered").length
+  const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex);
 
   // Network colors
   const getNetworkColor = (network) => {
@@ -236,9 +244,9 @@ export default function TransactionsPage() {
       AT: "bg-red-100 text-red-600",
       VODAFONE: "bg-red-100 text-red-600",
       TELECEL: "bg-blue-100 text-blue-600",
-    }
-    return colors[network?.toUpperCase()] || "bg-gray-100 text-gray-600"
-  }
+    };
+    return colors[network?.toUpperCase()] || "bg-gray-100 text-gray-600";
+  };
 
   // Status badge component
   const StatusBadge = ({ status }) => {
@@ -246,84 +254,130 @@ export default function TransactionsPage() {
       success: "bg-green-100 text-green-700 hover:bg-green-100",
       pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
       failed: "bg-red-100 text-red-700 hover:bg-red-100",
-    }
+    };
 
     return (
-      <Badge 
+      <Badge
         className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
         variant="secondary"
       >
         {status}
       </Badge>
-    )
-  }
+    );
+  };
 
   const DeliveryStatusBadge = ({ status }) => {
     const colors = {
       delivered: "bg-green-100 text-green-700 hover:bg-green-100",
       pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
+      processing: "bg-blue-100 text-blue-700 hover:bg-blue-100",
       failed: "bg-red-100 text-red-700 hover:bg-red-100",
-    }
+    };
 
     return (
-      <Badge 
+      <Badge
         className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
         variant="secondary"
       >
         {status}
       </Badge>
-    )
-  }
+    );
+  };
 
   const handleViewDetails = (transaction) => {
-    setSelectedTransaction(transaction)
-    setIsViewDialogOpen(true)
-  }
+    setSelectedTransaction(transaction);
+    setIsViewDialogOpen(true);
+  };
 
   const handleMarkDelivered = (transaction) => {
-    setSelectedTransaction(transaction)
-    setIsConfirmDeliveryDialogOpen(true)
-  }
+    setSelectedTransaction(transaction);
+    setIsConfirmDeliveryDialogOpen(true);
+  };
 
   const handleMarkFailed = (transaction) => {
-    setSelectedTransaction(transaction)
-    setIsMarkFailedDialogOpen(true)
-  }
+    setSelectedTransaction(transaction);
+    setIsMarkFailedDialogOpen(true);
+  };
 
   const confirmDelivery = () => {
-    if (!selectedTransaction) return
-    deliveredMutation.mutate(selectedTransaction.transactionId)
-  }
+    if (!selectedTransaction) return;
+    deliveredMutation.mutate(selectedTransaction.transactionId);
+  };
 
   const confirmFailed = () => {
     if (!selectedTransaction || !failureReason.trim()) {
-      toast.error("Please provide a failure reason")
-      return
+      toast.error("Please provide a failure reason");
+      return;
     }
     failedMutation.mutate({
       transactionId: selectedTransaction.transactionId,
-      reason: failureReason
-    })
-  }
+      reason: failureReason,
+    });
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/export-pending`,
+        {
+          method: "GET",
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+          },
+          credentials: "include",
+        },
+      );
+
+      if (response.status === 404) {
+        toast.error("No pending orders to export.");
+        return;
+      }
+
+      if (!response.ok) throw new Error("Export failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders-export-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success("Orders exported and marked as processing!");
+      refetchTransactions();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export orders");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Format date helper
   const formatDate = (dateString) => {
-    if (!dateString) return "N/A"
+    if (!dateString) return "N/A";
     return new Date(dateString).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">All Transactions</h2>
-          <p className="text-muted-foreground">Manage and monitor all data bundle transactions.</p>
+          <h2 className="text-3xl font-bold tracking-tight">
+            All Transactions
+          </h2>
+          <p className="text-muted-foreground">
+            Manage and monitor all data bundle transactions.
+          </p>
         </div>
       </div>
 
@@ -331,7 +385,9 @@ export default function TransactionsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">
+              Total Revenue
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-slate-500" />
           </CardHeader>
           <CardContent>
@@ -347,7 +403,9 @@ export default function TransactionsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">
+              Total Orders
+            </CardTitle>
             <CheckCircle className="h-4 w-4 text-slate-500" />
           </CardHeader>
           <CardContent>
@@ -363,7 +421,9 @@ export default function TransactionsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Active Orders</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">
+              Active Orders
+            </CardTitle>
             <Clock className="h-4 w-4 text-slate-500" />
           </CardHeader>
           <CardContent>
@@ -379,7 +439,9 @@ export default function TransactionsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Cost</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">
+              Total Cost
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-slate-500" />
           </CardHeader>
           <CardContent>
@@ -388,21 +450,18 @@ export default function TransactionsPage() {
             ) : (
               <div className="">
                 <div className="text-2xl font-bold">
-                   {formatCurrency(analytics?.totalCost || 0)}
+                  {formatCurrency(analytics?.totalCost || 0)}
                 </div>
-               
-                  <div className="">
-                   JBCP: {formatCurrency(analytics?.totalActualJBCPCost || 0)}
+                <div className="text-xs text-muted-foreground mt-1">
+                  JBCP: {formatCurrency(analytics?.totalActualJBCPCost || 0)}
                 </div>
-                 <div className="">
-                   RSP: {formatCurrency(analytics?.totalResellerProfits || 0)}
+                <div className="text-xs text-muted-foreground">
+                  RSP: {formatCurrency(analytics?.totalResellerProfits || 0)}
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
-
-        
       </div>
 
       <Card>
@@ -413,14 +472,14 @@ export default function TransactionsPage() {
               {/* Search */}
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search..." 
-                  className="pl-8" 
+                <Input
+                  placeholder="Search..."
+                  className="pl-8"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              
+
               {/* Network Filter */}
               <Select value={networkFilter} onValueChange={setNetworkFilter}>
                 <SelectTrigger className="w-32">
@@ -434,10 +493,11 @@ export default function TransactionsPage() {
                 </SelectContent>
               </Select>
 
-              {/* Status Filter - REMOVED since we only show success */}
-              
               {/* Delivery Status Filter */}
-              <Select value={deliveryStatusFilter} onValueChange={setDeliveryStatusFilter}>
+              <Select
+                value={deliveryStatusFilter}
+                onValueChange={setDeliveryStatusFilter}
+              >
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Delivery" />
                 </SelectTrigger>
@@ -460,21 +520,44 @@ export default function TransactionsPage() {
                 </SelectContent>
               </Select>
 
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="icon"
-                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                onClick={() =>
+                  setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                }
               >
                 <ArrowUpDown className="h-4 w-4" />
               </Button>
 
-              <Button 
-                onClick={() => refetchTransactions()} 
-                className="border-2 border-slate-600 bg-blue-500 text-white hover:bg-green-700"
-                disabled={isLoadingTransactions}
-              >
-                Refresh
-              </Button>
+              {/* Updated Buttons */}
+              <div className="flex items-center gap-2 ml-auto">
+                <Button
+                  onClick={handleExport}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2"
+                  disabled={isExporting || isLoadingTransactions}
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  Export Pending
+                </Button>
+
+                <Button
+                  onClick={() => refetchTransactions()}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2"
+                  disabled={isLoadingTransactions}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -483,7 +566,9 @@ export default function TransactionsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="whitespace-nowrap">Transaction ID</TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    Transaction ID
+                  </TableHead>
                   <TableHead className="whitespace-nowrap">Customer</TableHead>
                   <TableHead className="whitespace-nowrap">Bundle</TableHead>
                   <TableHead className="whitespace-nowrap">Network</TableHead>
@@ -492,7 +577,9 @@ export default function TransactionsPage() {
                   <TableHead className="whitespace-nowrap">Status</TableHead>
                   <TableHead className="whitespace-nowrap">Delivery</TableHead>
                   <TableHead className="whitespace-nowrap">Time</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -501,7 +588,9 @@ export default function TransactionsPage() {
                     <TableCell colSpan={10} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-                        <p className="text-slate-500">Loading transactions...</p>
+                        <p className="text-slate-500">
+                          Loading transactions...
+                        </p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -510,7 +599,9 @@ export default function TransactionsPage() {
                     <TableCell colSpan={10} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <XCircle className="h-8 w-8 text-red-500" />
-                        <p className="text-red-600 font-medium">Failed to load transactions</p>
+                        <p className="text-red-600 font-medium">
+                          Failed to load transactions
+                        </p>
                         <Button
                           variant="outline"
                           size="sm"
@@ -524,7 +615,10 @@ export default function TransactionsPage() {
                   </TableRow>
                 ) : paginatedTransactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-slate-500">
+                    <TableCell
+                      colSpan={10}
+                      className="text-center py-8 text-slate-500"
+                    >
                       No transactions found.
                     </TableCell>
                   </TableRow>
@@ -534,14 +628,23 @@ export default function TransactionsPage() {
                       <TableCell className="font-medium whitespace-nowrap font-mono text-xs">
                         {transaction.transactionId?.slice(-12) || "N/A"}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{transaction.customer}</TableCell>
-                      <TableCell className="whitespace-nowrap">{transaction.bundleName}</TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <Badge variant="outline" className={getNetworkColor(transaction.network)}>
+                        {transaction.customer}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {transaction.bundleName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Badge
+                          variant="outline"
+                          className={getNetworkColor(transaction.network)}
+                        >
                           {transaction.network}
                         </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{formatCurrency(transaction.amount)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {formatCurrency(transaction.amount)}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="flex items-center gap-1 font-medium text-green-600">
                           <TrendingUp className="h-3 w-3" />
@@ -552,14 +655,18 @@ export default function TransactionsPage() {
                         <StatusBadge status={transaction.status} />
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <DeliveryStatusBadge status={transaction.deliveryStatus} />
+                        <DeliveryStatusBadge
+                          status={transaction.deliveryStatus}
+                        />
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
                         {formatDate(transaction.dateTime)}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex justify-end gap-2">
-                          {transaction.status === "success" && transaction.deliveryStatus === "pending" && (
+                          {(transaction.status === "success" &&
+                            transaction.deliveryStatus === "pending") ||
+                          transaction.deliveryStatus === "processing" ? (
                             <>
                               <Button
                                 size="icon"
@@ -582,10 +689,10 @@ export default function TransactionsPage() {
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
-                          )}
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
+                          ) : null}
+                          <Button
+                            size="icon"
+                            variant="ghost"
                             className="h-8 w-8"
                             onClick={() => handleViewDetails(transaction)}
                           >
@@ -604,7 +711,9 @@ export default function TransactionsPage() {
           {totalPages > 1 && !isLoadingTransactions && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-slate-500">
-                Showing {startIndex + 1} to {Math.min(endIndex, sortedTransactions.length)} of {sortedTransactions.length} results
+                Showing {startIndex + 1} to{" "}
+                {Math.min(endIndex, sortedTransactions.length)} of{" "}
+                {sortedTransactions.length} results
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -619,28 +728,30 @@ export default function TransactionsPage() {
                 </Button>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    let pageNum
+                    let pageNum;
                     if (totalPages <= 5) {
-                      pageNum = i + 1
+                      pageNum = i + 1;
                     } else if (currentPage <= 3) {
-                      pageNum = i + 1
+                      pageNum = i + 1;
                     } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i
+                      pageNum = totalPages - 4 + i;
                     } else {
-                      pageNum = currentPage - 2 + i
+                      pageNum = currentPage - 2 + i;
                     }
 
                     return (
                       <Button
                         key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
+                        variant={
+                          currentPage === pageNum ? "default" : "outline"
+                        }
                         size="sm"
                         onClick={() => setCurrentPage(pageNum)}
                         className="w-8 h-8 p-0"
                       >
                         {pageNum}
                       </Button>
-                    )
+                    );
                   })}
                 </div>
                 <Button
@@ -664,18 +775,24 @@ export default function TransactionsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Transaction Details</DialogTitle>
-            <DialogDescription>Complete information about this transaction.</DialogDescription>
+            <DialogDescription>
+              Complete information about this transaction.
+            </DialogDescription>
           </DialogHeader>
           {selectedTransaction && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-slate-500">Transaction ID</p>
-                  <p className="font-mono font-medium text-xs">{selectedTransaction.transactionId}</p>
+                  <p className="font-mono font-medium text-xs">
+                    {selectedTransaction.transactionId}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Amount</p>
-                  <p className="font-medium text-lg">{formatCurrency(selectedTransaction.amount)}</p>
+                  <p className="font-medium text-lg">
+                    {formatCurrency(selectedTransaction.amount)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Customer</p>
@@ -683,26 +800,39 @@ export default function TransactionsPage() {
                 </div>
                 <div>
                   <p className="text-slate-500">Network</p>
-                  <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                  <Badge
+                    variant="outline"
+                    className={getNetworkColor(selectedTransaction.network)}
+                  >
                     {selectedTransaction.network}
                   </Badge>
                 </div>
                 <div>
                   <p className="text-slate-500">Bundle</p>
-                  <p className="font-medium">{selectedTransaction.bundleName}</p>
-                  <p className="text-xs text-slate-500">{selectedTransaction.bundleData}</p>
+                  <p className="font-medium">
+                    {selectedTransaction.bundleName}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {selectedTransaction.bundleData}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Profit</p>
-                  <p className="font-medium text-green-600">{formatCurrency(selectedTransaction.JBProfit)}</p>
+                  <p className="font-medium text-green-600">
+                    {formatCurrency(selectedTransaction.JBProfit)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Reseller</p>
-                  <p className="font-medium">{selectedTransaction.resellerName}</p>
+                  <p className="font-medium">
+                    {selectedTransaction.resellerName}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Reseller Profit</p>
-                  <p className="font-medium">{formatCurrency(selectedTransaction.resellerProfit)}</p>
+                  <p className="font-medium">
+                    {formatCurrency(selectedTransaction.resellerProfit)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Status</p>
@@ -710,17 +840,24 @@ export default function TransactionsPage() {
                 </div>
                 <div>
                   <p className="text-slate-500">Delivery Status</p>
-                  <DeliveryStatusBadge status={selectedTransaction.deliveryStatus} />
+                  <DeliveryStatusBadge
+                    status={selectedTransaction.deliveryStatus}
+                  />
                 </div>
                 <div className="col-span-2">
                   <p className="text-slate-500">Date & Time</p>
-                  <p className="font-medium">{formatDate(selectedTransaction.dateTime)}</p>
+                  <p className="font-medium">
+                    {formatDate(selectedTransaction.dateTime)}
+                  </p>
                 </div>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsViewDialogOpen(false)}
+            >
               Close
             </Button>
           </DialogFooter>
@@ -728,12 +865,16 @@ export default function TransactionsPage() {
       </Dialog>
 
       {/* Confirm Delivery Dialog */}
-      <Dialog open={isConfirmDeliveryDialogOpen} onOpenChange={setIsConfirmDeliveryDialogOpen}>
+      <Dialog
+        open={isConfirmDeliveryDialogOpen}
+        onOpenChange={setIsConfirmDeliveryDialogOpen}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Confirm Delivery</DialogTitle>
             <DialogDescription>
-              Confirm that the data bundle has been successfully delivered to the customer.
+              Confirm that the data bundle has been successfully delivered to
+              the customer.
             </DialogDescription>
           </DialogHeader>
           {selectedTransaction && (
@@ -741,13 +882,22 @@ export default function TransactionsPage() {
               <div className="bg-green-50 border border-green-200 rounded-md p-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="font-medium">{selectedTransaction.customer}</p>
-                    <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                    <p className="font-medium">
+                      {selectedTransaction.customer}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={getNetworkColor(selectedTransaction.network)}
+                    >
                       {selectedTransaction.network}
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-500">{selectedTransaction.bundleName}</p>
-                  <p className="text-xl font-bold text-green-600">{formatCurrency(selectedTransaction.amount)}</p>
+                  <p className="text-sm text-slate-500">
+                    {selectedTransaction.bundleName}
+                  </p>
+                  <p className="text-xl font-bold text-green-600">
+                    {formatCurrency(selectedTransaction.amount)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -782,12 +932,16 @@ export default function TransactionsPage() {
       </Dialog>
 
       {/* Mark Failed Dialog */}
-      <Dialog open={isMarkFailedDialogOpen} onOpenChange={setIsMarkFailedDialogOpen}>
+      <Dialog
+        open={isMarkFailedDialogOpen}
+        onOpenChange={setIsMarkFailedDialogOpen}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Mark Delivery as Failed</DialogTitle>
             <DialogDescription>
-              Please provide a reason why this delivery failed. The customer and reseller will be notified.
+              Please provide a reason why this delivery failed. The customer and
+              reseller will be notified.
             </DialogDescription>
           </DialogHeader>
           {selectedTransaction && (
@@ -795,13 +949,22 @@ export default function TransactionsPage() {
               <div className="bg-red-50 border border-red-200 rounded-md p-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="font-medium">{selectedTransaction.customer}</p>
-                    <Badge variant="outline" className={getNetworkColor(selectedTransaction.network)}>
+                    <p className="font-medium">
+                      {selectedTransaction.customer}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={getNetworkColor(selectedTransaction.network)}
+                    >
                       {selectedTransaction.network}
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-500">{selectedTransaction.bundleName}</p>
-                  <p className="text-xl font-bold text-red-600">{formatCurrency(selectedTransaction.amount)}</p>
+                  <p className="text-sm text-slate-500">
+                    {selectedTransaction.bundleName}
+                  </p>
+                  <p className="text-xl font-bold text-red-600">
+                    {formatCurrency(selectedTransaction.amount)}
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -845,5 +1008,5 @@ export default function TransactionsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
