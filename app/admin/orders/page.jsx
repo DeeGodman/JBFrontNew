@@ -69,10 +69,13 @@ export default function TransactionsPage() {
   const [failureReason, setFailureReason] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
+  // --- Bulk Action States ---
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [actionTargetIds, setActionTargetIds] = useState([]);
+
   const queryClient = useQueryClient();
   const itemsPerPage = 10;
 
-  // Get data from context
   const {
     transactions: contextTransactions,
     analytics,
@@ -81,163 +84,139 @@ export default function TransactionsPage() {
     refetchTransactions,
   } = useTransactions();
 
-  // Mark as delivered mutation
+  // --- Bulk Selection Logic ---
+  const toggleSelectAll = (visibleTxns) => {
+    if (selectedIds.length === visibleTxns.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(visibleTxns.map((t) => t.transactionId));
+    }
+  };
+
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    );
+  };
+
+  // --- Mutations (Modified for Bulk) ---
   const deliveredMutation = useMutation({
-    mutationFn: async (transactionId) => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            deliveryStatus: "delivered",
-          }),
-        },
+    mutationFn: async (transactionIds) => {
+      const ids = Array.isArray(transactionIds)
+        ? transactionIds
+        : [transactionIds];
+      return Promise.all(
+        ids.map(async (id) => {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${id}/delivery`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true",
+              },
+              credentials: "include",
+              body: JSON.stringify({ deliveryStatus: "delivered" }),
+            },
+          );
+          if (!response.ok) throw new Error(`Failed to update ${id}`);
+          return response.json();
+        }),
       );
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to mark as delivered");
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || "Failed to mark as delivered");
-      }
-
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["transactions"]);
       refetchTransactions();
-      toast.success("Transaction marked as delivered");
+      toast.success(`${actionTargetIds.length} order(s) marked as delivered`);
       setIsConfirmDeliveryDialogOpen(false);
       setSelectedTransaction(null);
+      setSelectedIds([]);
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to mark as delivered");
-    },
+    onError: (error) => toast.error(error.message || "Failed to update orders"),
   });
 
-  // Mark as failed mutation
   const failedMutation = useMutation({
-    mutationFn: async ({ transactionId, reason }) => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${transactionId}/delivery`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            deliveryStatus: "failed",
-            failureReason: reason,
-          }),
-        },
+    mutationFn: async ({ transactionIds, reason }) => {
+      const ids = Array.isArray(transactionIds)
+        ? transactionIds
+        : [transactionIds];
+      return Promise.all(
+        ids.map(async (id) => {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/${id}/delivery`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true",
+              },
+              credentials: "include",
+              body: JSON.stringify({
+                deliveryStatus: "pending", // Reset to pending as requested
+                failureReason: reason,
+              }),
+            },
+          );
+          if (!response.ok) throw new Error(`Failed to update ${id}`);
+          return response.json();
+        }),
       );
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to mark as failed");
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || "Failed to mark as failed");
-      }
-
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["transactions"]);
       refetchTransactions();
-      toast.success("Transaction marked as failed");
+      toast.success(`${actionTargetIds.length} order(s) reset to pending`);
       setIsMarkFailedDialogOpen(false);
       setSelectedTransaction(null);
       setFailureReason("");
+      setSelectedIds([]);
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to mark as failed");
-    },
+    onError: (error) => toast.error(error.message || "Failed to update orders"),
   });
 
-  // Frontend filtering
+  // --- Filtering & Pagination ---
   const filteredTransactions = contextTransactions.filter((txn) => {
-    // Only show successful transactions with valid delivery statuses
     if (txn.status !== "success") return false;
-    if (
-      txn.deliveryStatus !== "pending" &&
-      txn.deliveryStatus !== "delivered" &&
-      txn.deliveryStatus !== "processing"
-    )
-      return false;
-
-    // Search filter
     if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch =
-        txn.transactionId?.toLowerCase().includes(searchLower) ||
-        txn.customer?.includes(searchQuery) ||
-        txn.bundleName?.toLowerCase().includes(searchLower);
-
-      if (!matchesSearch) return false;
+      const s = searchQuery.toLowerCase();
+      if (
+        !(
+          txn.transactionId?.toLowerCase().includes(s) ||
+          txn.customer?.includes(searchQuery) ||
+          txn.bundleName?.toLowerCase().includes(s)
+        )
+      )
+        return false;
     }
-
-    // Network filter
     if (
       networkFilter !== "all" &&
       txn.network?.toUpperCase() !== networkFilter.toUpperCase()
-    ) {
+    )
       return false;
-    }
-
-    // Delivery status filter
     if (
       deliveryStatusFilter !== "all" &&
       txn.deliveryStatus !== deliveryStatusFilter
-    ) {
+    )
       return false;
-    }
-
     return true;
   });
 
-  // Frontend sorting
   const sortedTransactions = [...filteredTransactions].sort((a, b) => {
-    let compareValue = 0;
-
-    switch (sortBy) {
-      case "date":
-        compareValue = new Date(b.dateTime) - new Date(a.dateTime);
-        break;
-      case "amount":
-        compareValue = b.amount - a.amount;
-        break;
-      case "profit":
-        compareValue = b.JBProfit - a.JBProfit;
-        break;
-      default:
-        compareValue = new Date(b.dateTime) - new Date(a.dateTime);
-    }
-
-    return sortOrder === "asc" ? -compareValue : compareValue;
+    let comp = 0;
+    if (sortBy === "date") comp = new Date(b.dateTime) - new Date(a.dateTime);
+    else if (sortBy === "amount") comp = b.amount - a.amount;
+    else if (sortBy === "profit") comp = b.JBProfit - a.JBProfit;
+    return sortOrder === "asc" ? -comp : comp;
   });
 
-  // Pagination
   const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex);
+  const paginatedTransactions = sortedTransactions.slice(
+    startIndex,
+    startIndex + itemsPerPage,
+  );
 
-  // Network colors
+  // --- Helpers & Handlers ---
   const getNetworkColor = (network) => {
     const colors = {
       MTN: "bg-yellow-100 text-yellow-600",
@@ -248,14 +227,36 @@ export default function TransactionsPage() {
     return colors[network?.toUpperCase()] || "bg-gray-100 text-gray-600";
   };
 
-  // Status badge component
+  const handleMarkDelivered = (transaction) => {
+    setSelectedTransaction(transaction);
+    const isBulk = selectedIds.includes(transaction.transactionId);
+    setActionTargetIds(isBulk ? selectedIds : [transaction.transactionId]);
+    setIsConfirmDeliveryDialogOpen(true);
+  };
+
+  const handleMarkFailed = (transaction) => {
+    setSelectedTransaction(transaction);
+    const isBulk = selectedIds.includes(transaction.transactionId);
+    setActionTargetIds(isBulk ? selectedIds : [transaction.transactionId]);
+    setIsMarkFailedDialogOpen(true);
+  };
+
+  const confirmDelivery = () => deliveredMutation.mutate(actionTargetIds);
+  const confirmFailed = () => {
+    if (!failureReason.trim())
+      return toast.error("Please provide a failure reason");
+    failedMutation.mutate({
+      transactionIds: actionTargetIds,
+      reason: failureReason,
+    });
+  };
+
   const StatusBadge = ({ status }) => {
     const colors = {
-      success: "bg-green-100 text-green-700 hover:bg-green-100",
-      pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
-      failed: "bg-red-100 text-red-700 hover:bg-red-100",
+      success: "bg-green-100 text-green-700",
+      pending: "bg-yellow-100 text-yellow-700",
+      failed: "bg-red-100 text-red-700",
     };
-
     return (
       <Badge
         className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
@@ -268,12 +269,11 @@ export default function TransactionsPage() {
 
   const DeliveryStatusBadge = ({ status }) => {
     const colors = {
-      delivered: "bg-green-100 text-green-700 hover:bg-green-100",
-      pending: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
-      processing: "bg-blue-100 text-blue-700 hover:bg-blue-100",
-      failed: "bg-red-100 text-red-700 hover:bg-red-100",
+      delivered: "bg-green-100 text-green-700",
+      pending: "bg-yellow-100 text-yellow-700",
+      processing: "bg-blue-100 text-blue-700",
+      failed: "bg-red-100 text-red-700",
     };
-
     return (
       <Badge
         className={colors[status?.toLowerCase()] || "bg-gray-100 text-gray-700"}
@@ -289,54 +289,21 @@ export default function TransactionsPage() {
     setIsViewDialogOpen(true);
   };
 
-  const handleMarkDelivered = (transaction) => {
-    setSelectedTransaction(transaction);
-    setIsConfirmDeliveryDialogOpen(true);
-  };
-
-  const handleMarkFailed = (transaction) => {
-    setSelectedTransaction(transaction);
-    setIsMarkFailedDialogOpen(true);
-  };
-
-  const confirmDelivery = () => {
-    if (!selectedTransaction) return;
-    deliveredMutation.mutate(selectedTransaction.transactionId);
-  };
-
-  const confirmFailed = () => {
-    if (!selectedTransaction || !failureReason.trim()) {
-      toast.error("Please provide a failure reason");
-      return;
-    }
-    failedMutation.mutate({
-      transactionId: selectedTransaction.transactionId,
-      reason: failureReason,
-    });
-  };
-
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const response = await fetch(
+      const res = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/transactions/export-pending`,
         {
           method: "GET",
-          headers: {
-            "ngrok-skip-browser-warning": "true",
-          },
+          headers: { "ngrok-skip-browser-warning": "true" },
           credentials: "include",
         },
       );
-
-      if (response.status === 404) {
-        toast.error("No pending orders to export.");
-        return;
-      }
-
-      if (!response.ok) throw new Error("Export failed");
-
-      const blob = await response.blob();
+      if (res.status === 404)
+        return toast.error("No pending orders to export.");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -345,28 +312,25 @@ export default function TransactionsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-
       toast.success("Orders exported and marked as processing!");
       refetchTransactions();
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
       toast.error("Failed to export orders");
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Format date helper
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString) =>
+    dateString
+      ? new Date(dateString).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "N/A";
 
   return (
     <div className="space-y-6">
@@ -381,62 +345,45 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Total Revenue
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-slate-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoadingTransactions ? (
-              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {formatCurrency(analytics?.totalRevenue || 0)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Total Orders
-            </CardTitle>
-            <CheckCircle className="h-4 w-4 text-slate-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoadingTransactions ? (
-              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {analytics?.totalOrders || 0}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Active Orders
-            </CardTitle>
-            <Clock className="h-4 w-4 text-slate-500" />
-          </CardHeader>
-          <CardContent>
-            {isLoadingTransactions ? (
-              <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {analytics?.activeOrders || 0}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
+        {[
+          {
+            t: "Total Revenue",
+            v: analytics?.totalRevenue,
+            i: TrendingUp,
+            c: true,
+          },
+          {
+            t: "Total Orders",
+            v: analytics?.totalOrders,
+            i: CheckCircle,
+            c: false,
+          },
+          {
+            t: "Active Orders",
+            v: analytics?.activeOrders,
+            i: Clock,
+            c: false,
+          },
+        ].map((s) => (
+          <Card key={s.t}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500">
+                {s.t}
+              </CardTitle>
+              <s.i className="h-4 w-4 text-slate-500" />
+            </CardHeader>
+            <CardContent>
+              {isLoadingTransactions ? (
+                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
+              ) : (
+                <div className="text-2xl font-bold">
+                  {s.c ? formatCurrency(s.v || 0) : s.v || 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">
@@ -448,7 +395,7 @@ export default function TransactionsPage() {
             {isLoadingTransactions ? (
               <div className="h-8 w-24 bg-gray-200 rounded animate-pulse" />
             ) : (
-              <div className="">
+              <div>
                 <div className="text-2xl font-bold">
                   {formatCurrency(analytics?.totalCost || 0)}
                 </div>
@@ -469,7 +416,6 @@ export default function TransactionsPage() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <CardTitle>All Transactions</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -479,8 +425,6 @@ export default function TransactionsPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-
-              {/* Network Filter */}
               <Select value={networkFilter} onValueChange={setNetworkFilter}>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Network" />
@@ -492,8 +436,6 @@ export default function TransactionsPage() {
                   <SelectItem value="AT">AT</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* Delivery Status Filter */}
               <Select
                 value={deliveryStatusFilter}
                 onValueChange={setDeliveryStatusFilter}
@@ -507,8 +449,6 @@ export default function TransactionsPage() {
                   <SelectItem value="delivered">Delivered</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* Sort */}
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Sort by" />
@@ -519,7 +459,6 @@ export default function TransactionsPage() {
                   <SelectItem value="profit">Profit</SelectItem>
                 </SelectContent>
               </Select>
-
               <Button
                 variant="outline"
                 size="icon"
@@ -529,8 +468,6 @@ export default function TransactionsPage() {
               >
                 <ArrowUpDown className="h-4 w-4" />
               </Button>
-
-              {/* Updated Buttons */}
               <div className="flex items-center gap-2 ml-auto">
                 <Button
                   onClick={handleExport}
@@ -543,10 +480,9 @@ export default function TransactionsPage() {
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Download className="h-3.5 w-3.5" />
-                  )}
+                  )}{" "}
                   Export Pending
                 </Button>
-
                 <Button
                   onClick={() => refetchTransactions()}
                   variant="outline"
@@ -554,8 +490,7 @@ export default function TransactionsPage() {
                   className="h-9 gap-2"
                   disabled={isLoadingTransactions}
                 >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  Refresh
+                  <ArrowUpDown className="h-3.5 w-3.5" /> Refresh
                 </Button>
               </div>
             </div>
@@ -566,6 +501,17 @@ export default function TransactionsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px] pl-4">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300"
+                      checked={
+                        paginatedTransactions.length > 0 &&
+                        selectedIds.length === paginatedTransactions.length
+                      }
+                      onChange={() => toggleSelectAll(paginatedTransactions)}
+                    />
+                  </TableHead>
                   <TableHead className="whitespace-nowrap">
                     Transaction ID
                   </TableHead>
@@ -585,7 +531,7 @@ export default function TransactionsPage() {
               <TableBody>
                 {isLoadingTransactions ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
                         <p className="text-slate-500">
@@ -596,7 +542,7 @@ export default function TransactionsPage() {
                   </TableRow>
                 ) : isErrorTransactions ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <XCircle className="h-8 w-8 text-red-500" />
                         <p className="text-red-600 font-medium">
@@ -616,7 +562,7 @@ export default function TransactionsPage() {
                 ) : paginatedTransactions.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
+                      colSpan={11}
                       className="text-center py-8 text-slate-500"
                     >
                       No transactions found.
@@ -625,6 +571,18 @@ export default function TransactionsPage() {
                 ) : (
                   paginatedTransactions.map((transaction) => (
                     <TableRow key={transaction.transactionId}>
+                      <TableCell className="pl-4">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300"
+                          checked={selectedIds.includes(
+                            transaction.transactionId,
+                          )}
+                          onChange={() =>
+                            toggleSelectRow(transaction.transactionId)
+                          }
+                        />
+                      </TableCell>
                       <TableCell className="font-medium whitespace-nowrap font-mono text-xs">
                         {transaction.transactionId?.slice(-12) || "N/A"}
                       </TableCell>
@@ -647,7 +605,7 @@ export default function TransactionsPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="flex items-center gap-1 font-medium text-green-600">
-                          <TrendingUp className="h-3 w-3" />
+                          <TrendingUp className="h-3 w-3" />{" "}
                           {formatCurrency(transaction.JBProfit)}
                         </span>
                       </TableCell>
@@ -664,9 +622,9 @@ export default function TransactionsPage() {
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex justify-end gap-2">
-                          {(transaction.status === "success" &&
+                          {((transaction.status === "success" &&
                             transaction.deliveryStatus === "pending") ||
-                          transaction.deliveryStatus === "processing" ? (
+                            transaction.deliveryStatus === "processing") && (
                             <>
                               <Button
                                 size="icon"
@@ -689,7 +647,7 @@ export default function TransactionsPage() {
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </>
-                          ) : null}
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -706,14 +664,12 @@ export default function TransactionsPage() {
               </TableBody>
             </Table>
           </div>
-
-          {/* Pagination */}
           {totalPages > 1 && !isLoadingTransactions && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-slate-500">
                 Showing {startIndex + 1} to{" "}
-                {Math.min(endIndex, sortedTransactions.length)} of{" "}
-                {sortedTransactions.length} results
+                {Math.min(startIndex + itemsPerPage, sortedTransactions.length)}{" "}
+                of {sortedTransactions.length} results
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -723,33 +679,27 @@ export default function TransactionsPage() {
                   disabled={currentPage === 1}
                   className="gap-1 hover:bg-slate-200"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                  Previous
+                  <ChevronLeft className="w-4 h-4" /> Previous
                 </Button>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-
+                    let p =
+                      totalPages <= 5
+                        ? i + 1
+                        : currentPage <= 3
+                          ? i + 1
+                          : currentPage >= totalPages - 2
+                            ? totalPages - 4 + i
+                            : currentPage - 2 + i;
                     return (
                       <Button
-                        key={pageNum}
-                        variant={
-                          currentPage === pageNum ? "default" : "outline"
-                        }
+                        key={p}
+                        variant={currentPage === p ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
+                        onClick={() => setCurrentPage(p)}
                         className="w-8 h-8 p-0"
                       >
-                        {pageNum}
+                        {p}
                       </Button>
                     );
                   })}
@@ -761,8 +711,7 @@ export default function TransactionsPage() {
                   disabled={currentPage === totalPages}
                   className="gap-1 hover:bg-slate-200"
                 >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
+                  Next <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             </div>
@@ -873,11 +822,12 @@ export default function TransactionsPage() {
           <DialogHeader>
             <DialogTitle>Confirm Delivery</DialogTitle>
             <DialogDescription>
-              Confirm that the data bundle has been successfully delivered to
-              the customer.
+              {actionTargetIds.length > 1
+                ? `Confirm that ${actionTargetIds.length} data bundles have been delivered.`
+                : "Confirm that the data bundle has been successfully delivered to the customer."}
             </DialogDescription>
           </DialogHeader>
-          {selectedTransaction && (
+          {selectedTransaction && actionTargetIds.length === 1 && (
             <div className="py-4">
               <div className="bg-green-50 border border-green-200 rounded-md p-4">
                 <div className="space-y-2">
@@ -940,38 +890,40 @@ export default function TransactionsPage() {
           <DialogHeader>
             <DialogTitle>Mark Delivery as Failed</DialogTitle>
             <DialogDescription>
-              Please provide a reason why this delivery failed. The customer and
-              reseller will be notified.
+              Orders will be reset to <strong>Pending</strong>. Provide a reason
+              for the failure.
             </DialogDescription>
           </DialogHeader>
           {selectedTransaction && (
             <div className="space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">
-                      {selectedTransaction.customer}
+              {actionTargetIds.length === 1 && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">
+                        {selectedTransaction.customer}
+                      </p>
+                      <Badge
+                        variant="outline"
+                        className={getNetworkColor(selectedTransaction.network)}
+                      >
+                        {selectedTransaction.network}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-slate-500">
+                      {selectedTransaction.bundleName}
                     </p>
-                    <Badge
-                      variant="outline"
-                      className={getNetworkColor(selectedTransaction.network)}
-                    >
-                      {selectedTransaction.network}
-                    </Badge>
+                    <p className="text-xl font-bold text-red-600">
+                      {formatCurrency(selectedTransaction.amount)}
+                    </p>
                   </div>
-                  <p className="text-sm text-slate-500">
-                    {selectedTransaction.bundleName}
-                  </p>
-                  <p className="text-xl font-bold text-red-600">
-                    {formatCurrency(selectedTransaction.amount)}
-                  </p>
                 </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="failure-reason">Failure Reason *</Label>
                 <Textarea
                   id="failure-reason"
-                  placeholder="Enter the reason for delivery failure..."
+                  placeholder="Enter failure reason..."
                   value={failureReason}
                   onChange={(e) => setFailureReason(e.target.value)}
                   disabled={failedMutation.isPending}
